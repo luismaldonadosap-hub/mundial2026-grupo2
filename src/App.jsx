@@ -320,7 +320,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
       <div style={{background:'#0d1b2a',border:'2px solid #1565c0',borderRadius:20,padding:36,
         width:300,textAlign:'center',boxShadow:'0 8px 32px rgba(0,0,0,0.5)'}}>
         <div style={{fontSize:40,marginBottom:8}}>🏆</div>
-        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Copa del Mundo 2026</div>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Quiniela Freddy&Pavel 2026</div>
         <div style={{fontSize:13,color:'#90caf9',marginBottom:24}}>Introduce tu nombre para entrar</div>
         <input value={nickInput} onChange={e=>setNickInput(e.target.value)}
           onKeyDown={e=>e.key==='Enter'&&nickInput.trim()&&setNickname(nickInput.trim())}
