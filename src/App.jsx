@@ -368,7 +368,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',maxWidth:900,margin:'0 auto'}}>
           <div style={{fontSize:13,color:'#90caf9',paddingTop:6}}>👤 {nickname}</div>
           <div>
-            <div style={{fontSize:24,fontWeight:800}}>🏆 Copa del Mundo 2026</div>
+            <div style={{fontSize:24,fontWeight:800}}>🏆 Copa Fray Luis de León 2026</div>
             <div style={{fontSize:11,color:'#90caf9',marginBottom:6}}>EE.UU. · Canadá · México • 11 Jun – 19 Jul</div>
           </div>
           <div style={{textAlign:'right',paddingTop:4}}>
