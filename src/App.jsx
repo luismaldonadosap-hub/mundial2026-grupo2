@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from './supabase.js'
 
 // ── CONSTANTES ────────────────────────────────────────────────
-const ADMIN_PIN  = '2026'
+const ADMIN_PIN  = '2145'
 const LOCK_DATE  = new Date('2026-06-11T21:00:00Z')
 
 const GROUPS = {
