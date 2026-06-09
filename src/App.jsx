@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from './supabase.js'
 
 // ── CONSTANTES ────────────────────────────────────────────────
-const ADMIN_PIN  = '2145'
+const ADMIN_PIN  = '2026'
 const LOCK_DATE  = new Date('2026-06-11T21:00:00Z')
 
 const GROUPS = {
@@ -306,18 +306,72 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
   // ── TABS ──────────────────────────────────────────────────
   const TABS = [
     {id:'grupos',label:'📊 Grupos'},
-    ...(isAdmin ? [{id:'partidos',label:'⚽ Partidos'}] : []),
+    {id:'partidos',label:'⚽ Partidos'},
     {id:'eliminatorias',label:'🏆 Eliminatorias'},
     {id:'bracket',label:'🌐 Bracket'},
     {id:'quiniela',label:'🎯 Quiniela'},
     {id:'ranking',label:'🥇 Ranking'},
     {id:'pronosticos',label:'👁 Pronósticos'},
+    {id:'estadisticas',label:'📈 Estadísticas'},
   ]
 
   const groupMs = matches.filter(m => m.grp===activeGroup)
 
   // Lista de todos los participantes
   const allNicknames = [...new Set(allQuinielas.map(r => r.nickname))]
+
+  // Colores por jugador
+  const PLAYER_COLORS = ['#42a5f5','#69f0ae','#ff7043','#ce93d8','#ffca28','#26c6da','#ef5350','#66bb6a','#ffa726','#ab47bc']
+  const playerColor = nick => PLAYER_COLORS[allNicknames.indexOf(nick) % PLAYER_COLORS.length]
+
+  // Partidos jugados (con resultado real)
+  const playedMatches = matches.filter(m => m.s1!=='' && m.s2!=='' && !isNaN(parseInt(m.s1)) && !isNaN(parseInt(m.s2)))
+  const pendingMatches = matches.filter(m => m.s1==='' || m.s2==='')
+
+  // Puntos acumulados por partido para cada jugador (para gráfica de línea)
+  const progressData = useMemo(() => {
+    return playedMatches.map((m, idx) => {
+      const point = { label: `${m.t1?.split(' ')[0]||'?'} vs ${m.t2?.split(' ')[0]||'?'}`, idx: idx+1 }
+      allNicknames.forEach(nick => {
+        const q = allQuinielas.find(r => r.nickname===nick && r.match_id===m.id)
+        const badge = getBadge(m, q)
+        // acumulado hasta este partido
+        let acc = 0
+        for (let i = 0; i <= idx; i++) {
+          const pm = playedMatches[i]
+          const pq = allQuinielas.find(r => r.nickname===nick && r.match_id===pm.id)
+          const pb = getBadge(pm, pq)
+          if (pb) acc += pb.pts
+        }
+        point[nick] = acc
+      })
+      return point
+    })
+  }, [playedMatches, allNicknames, allQuinielas])
+
+  // Puntos actuales y máximos posibles
+  const playerStats = useMemo(() => {
+    return allNicknames.map(nick => {
+      let current = 0, maxExtra = 0
+      matches.forEach(m => {
+        const q = allQuinielas.find(r => r.nickname===nick && r.match_id===m.id)
+        const badge = getBadge(m, q)
+        if (badge) current += badge.pts
+        // máximo posible en partidos pendientes
+        if ((m.s1===''||m.s2==='') && q && q.s1!=='' && q.s2!=='') maxExtra += 3
+      })
+      return { nick, current, max: current + maxExtra }
+    }).sort((a,b) => b.current - a.current)
+  }, [allNicknames, allQuinielas, matches])
+
+  // Probabilidad de ganar (simulación simple basada en puntos máximos)
+  const winProb = useMemo(() => {
+    if (playerStats.length === 0) return {}
+    const totalMax = playerStats.reduce((s,p) => s + p.max, 0)
+    const probs = {}
+    playerStats.forEach(p => { probs[p.nick] = totalMax > 0 ? Math.round((p.max / totalMax) * 100) : 0 })
+    return probs
+  }, [playerStats])
 
   // Pronóstico de un jugador para un partido
   const getQ = (nick, matchId) => allQuinielas.find(r => r.nickname===nick && r.match_id===matchId)
@@ -476,7 +530,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
         )}
 
         {/* ── PARTIDOS ── */}
-        {tab==='partidos' && isAdmin && groupMs.map(m=>(
+        {tab==='partidos' && groupMs.map(m=>(
           <MatchRow key={m.id} m={m} onScore={updateMatchScore} locked={isLocked} isAdmin={isAdmin}/>
         ))}
 
@@ -619,6 +673,146 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* ── ESTADÍSTICAS ── */}
+        {tab==='estadisticas' && (
+          <div>
+            {allNicknames.length===0 ? (
+              <div style={{textAlign:'center',color:'#546e7a',padding:30,fontSize:13}}>
+                Aún no hay participantes con pronósticos guardados.
+              </div>
+            ) : (
+              <div>
+
+                {/* GRÁFICA DE BARRAS — puntos actuales */}
+                <div style={{background:'#0d1b2a',borderRadius:12,padding:16,border:'1px solid #1e3a5f',marginBottom:16}}>
+                  <div style={{fontWeight:800,fontSize:13,color:'#42a5f5',marginBottom:12}}>📊 Puntos actuales vs Máximo posible</div>
+                  {playerStats.map(({nick, current, max}) => (
+                    <div key={nick} style={{marginBottom:12}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}>
+                        <span style={{color:playerColor(nick),fontWeight:700}}>{nick===nickname?'⭐ '+nick:nick}</span>
+                        <span style={{color:'#fff',fontWeight:800}}>{current} pts <span style={{color:'#546e7a',fontWeight:400}}>/ {max} max</span></span>
+                      </div>
+                      {/* Barra máximo */}
+                      <div style={{background:'#1e2d3d',borderRadius:20,height:22,position:'relative',overflow:'hidden'}}>
+                        {/* Barra máximo posible */}
+                        <div style={{position:'absolute',left:0,top:0,height:'100%',
+                          width:`${playerStats[0]?.max>0?(max/playerStats[0].max)*100:0}%`,
+                          background:'rgba(255,255,255,0.08)',borderRadius:20,transition:'width 0.5s'}}/>
+                        {/* Barra actual */}
+                        <div style={{position:'absolute',left:0,top:0,height:'100%',
+                          width:`${playerStats[0]?.max>0?(current/playerStats[0].max)*100:0}%`,
+                          background:`linear-gradient(90deg,${playerColor(nick)},${playerColor(nick)}99)`,
+                          borderRadius:20,transition:'width 0.5s'}}/>
+                        <div style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',
+                          fontSize:10,color:'#546e7a'}}>
+                          +{max-current} posibles
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{fontSize:10,color:'#37474f',marginTop:8}}>
+                    🔵 Puntos actuales · ⬜ Máximo alcanzable si acierta todos los partidos pendientes
+                  </div>
+                </div>
+
+                {/* PROBABILIDAD DE GANAR */}
+                <div style={{background:'#0d1b2a',borderRadius:12,padding:16,border:'1px solid #1e3a5f',marginBottom:16}}>
+                  <div style={{fontWeight:800,fontSize:13,color:'#ffca28',marginBottom:4}}>🎲 Probabilidad de ganar la quiniela</div>
+                  <div style={{fontSize:11,color:'#546e7a',marginBottom:12}}>Basada en puntos máximos alcanzables</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',marginBottom:12}}>
+                    {playerStats.map(({nick}) => (
+                      <div key={nick} style={{textAlign:'center',background:'#1e2a3a',borderRadius:10,padding:'10px 14px',minWidth:80}}>
+                        <div style={{fontSize:22,fontWeight:900,color:playerColor(nick)}}>{winProb[nick]}%</div>
+                        <div style={{fontSize:11,color:'#90caf9',marginTop:2}}>{nick===nickname?'⭐ '+nick:nick}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Barra de probabilidades */}
+                  <div style={{display:'flex',borderRadius:20,overflow:'hidden',height:28}}>
+                    {playerStats.map(({nick}) => winProb[nick]>0&&(
+                      <div key={nick} style={{width:`${winProb[nick]}%`,background:playerColor(nick),
+                        display:'flex',alignItems:'center',justifyContent:'center',
+                        fontSize:10,fontWeight:700,color:'#000',minWidth:winProb[nick]>5?'auto':0,
+                        transition:'width 0.5s'}}>
+                        {winProb[nick]>8?`${winProb[nick]}%`:''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* GRÁFICA DE LÍNEA — progreso acumulado */}
+                <div style={{background:'#0d1b2a',borderRadius:12,padding:16,border:'1px solid #1e3a5f',marginBottom:16}}>
+                  <div style={{fontWeight:800,fontSize:13,color:'#69f0ae',marginBottom:12}}>📈 Progreso partido a partido</div>
+                  {progressData.length===0 ? (
+                    <div style={{textAlign:'center',color:'#546e7a',fontSize:12,padding:20}}>
+                      Disponible cuando haya resultados reales
+                    </div>
+                  ) : (
+                    <div style={{overflowX:'auto'}}>
+                      <div style={{minWidth:Math.max(300, progressData.length*60),position:'relative'}}>
+                        {/* Leyenda */}
+                        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                          {allNicknames.map(nick=>(
+                            <div key={nick} style={{display:'flex',alignItems:'center',gap:4,fontSize:11}}>
+                              <div style={{width:12,height:12,borderRadius:'50%',background:playerColor(nick)}}/>
+                              <span style={{color:'#cfd8dc'}}>{nick===nickname?'⭐ '+nick:nick}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* SVG gráfica */}
+                        {(()=>{
+                          const W = Math.max(300, progressData.length*60)
+                          const H = 160
+                          const PAD = {t:10,r:20,b:30,l:30}
+                          const maxPts = Math.max(1, ...allNicknames.map(nick => Math.max(...progressData.map(d=>d[nick]||0))))
+                          const x = i => PAD.l + (i/(progressData.length-1||1))*(W-PAD.l-PAD.r)
+                          const y = v => PAD.t + (1-v/maxPts)*(H-PAD.t-PAD.b)
+                          return(
+                            <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:'visible'}}>
+                              {/* Grid */}
+                              {[0,25,50,75,100].map(pct=>{
+                                const yy = PAD.t+(1-pct/100)*(H-PAD.t-PAD.b)
+                                const val = Math.round(maxPts*pct/100)
+                                return(
+                                  <g key={pct}>
+                                    <line x1={PAD.l} x2={W-PAD.r} y1={yy} y2={yy} stroke="#1e3a5f" strokeWidth="1"/>
+                                    <text x={PAD.l-4} y={yy+4} fontSize="9" fill="#546e7a" textAnchor="end">{val}</text>
+                                  </g>
+                                )
+                              })}
+                              {/* Líneas por jugador */}
+                              {allNicknames.map(nick=>{
+                                const pts = progressData.map(d=>d[nick]||0)
+                                const path = pts.map((v,i)=>`${i===0?'M':'L'}${x(i)},${y(v)}`).join(' ')
+                                return(
+                                  <g key={nick}>
+                                    <path d={path} fill="none" stroke={playerColor(nick)} strokeWidth="2.5" strokeLinejoin="round"/>
+                                    {pts.map((v,i)=>(
+                                      <circle key={i} cx={x(i)} cy={y(v)} r="4" fill={playerColor(nick)} stroke="#0a0e1a" strokeWidth="1.5"/>
+                                    ))}
+                                  </g>
+                                )
+                              })}
+                              {/* Etiquetas eje X */}
+                              {progressData.map((d,i)=>(
+                                <text key={i} x={x(i)} y={H-PAD.b+14} fontSize="8" fill="#546e7a" textAnchor="middle"
+                                  transform={`rotate(-30,${x(i)},${H-PAD.b+14})`}>
+                                  P{i+1}
+                                </text>
+                              ))}
+                            </svg>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
           </div>
         )}
 
