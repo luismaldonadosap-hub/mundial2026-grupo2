@@ -148,7 +148,7 @@ export default function App() {
   const [isAdmin, setIsAdmin]     = useState(false)
   const [showLogin, setShowLogin] = useState(false)
   const [pin, setPin]             = useState('')
-  const [pinError, setPinError]   = useState(false)
+  const [adminPinError, setAdminPinError]   = useState(false)
   const [saving, setSaving]       = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiMsg, setAiMsg]         = useState('')
@@ -281,7 +281,7 @@ export default function App() {
   // ── ADMIN ─────────────────────────────────────────────────
   function tryLogin() {
     if (pin === ADMIN_PIN) { setIsAdmin(true); setShowLogin(false); setPinError(false); setPin('') }
-    else setPinError(true)
+    else setAdminPinError(true)
   }
 
   // ── GUARDAR RESULTADO (admin) ──────────────────────────────
@@ -511,7 +511,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
             style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
               background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
               boxSizing:'border-box',marginBottom:14,letterSpacing:8}}/>
-          {pinError&&<div style={{color:'#e53935',fontSize:12,marginBottom:10}}>{pinError}</div>}
+          {adminPinError&&<div style={{color:'#e53935',fontSize:12,marginBottom:10}}>{pinError}</div>}
           <button onClick={handleCreatePin}
             style={{width:'100%',background:'#1b5e20',border:'none',borderRadius:10,padding:12,
               color:'#fff',fontWeight:800,fontSize:16,cursor:'pointer'}}>
@@ -527,7 +527,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
             onKeyDown={e=>e.key==='Enter'&&handleVerifyPin()}
             placeholder="Tu PIN"
             style={{width:'100%',padding:'10px 12px',borderRadius:8,
-              border:`2px solid ${pinError?'#e53935':'#37474f'}`,
+              border:`2px solid ${adminPinError?'#e53935':'#37474f'}`,
               background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
               boxSizing:'border-box',marginBottom:14,letterSpacing:8}}/>
           {pinError&&<div style={{color:'#e53935',fontSize:12,marginBottom:10}}>{pinError}</div>}
@@ -602,7 +602,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                 background:'#1e2d3d',color:'#fff',fontSize:16,textAlign:'center',boxSizing:'border-box'}}/>
             {pinError&&<div style={{color:'#e53935',fontSize:12,marginTop:6}}>PIN incorrecto</div>}
             <div style={{display:'flex',gap:8,marginTop:14}}>
-              <button onClick={()=>{setShowLogin(false);setPinError(false);setPin('')}}
+              <button onClick={()=>{setShowLogin(false);setAdminPinError(false);setPin('')}}
                 style={{flex:1,padding:10,borderRadius:8,border:'none',background:'#263238',color:'#90a4ae',cursor:'pointer',fontWeight:700}}>Cancelar</button>
               <button onClick={tryLogin}
                 style={{flex:1,padding:10,borderRadius:8,border:'none',background:'#1565c0',color:'#fff',cursor:'pointer',fontWeight:700}}>Entrar</button>
