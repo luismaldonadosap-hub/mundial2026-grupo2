@@ -1035,12 +1035,12 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                       ))}
                     </div>
                     <div style={{overflowX:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth: Math.max(400, allNicknames.length * 90)}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth: Math.max(400, allNicknames.length * 55)}}>
                         <thead>
                           <tr style={{background:'#0d2137',color:'#90caf9'}}>
                             <th style={{padding:'8px 10px',textAlign:'left',minWidth:120}}>Partido</th>
                             {allNicknames.map(nick=>(
-                              <th key={nick} style={{padding:'8px 8px',textAlign:'center',minWidth:80,
+                              <th key={nick} style={{padding:'4px 2px',textAlign:'center',minWidth:50,
                                 color:nick===nickname?'#42a5f5':'#90caf9'}}>
                                 {nick===nickname?'⭐ '+nick:nick}
                               </th>
@@ -1146,7 +1146,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                                 padding:'10px 12px',border:'1px solid #1e3a5f',marginBottom:6}}>
                                 <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                                   <div style={{flex:1,textAlign:'right',fontSize:13,fontWeight:600}}>{F(m.t1)}</div>
-                                  <div style={{textAlign:'center',minWidth:80}}>
+                                  <div style={{textAlign:'center',minWidth:50}}>
                                     {q&&q.s1!==''&&q.s2!==''?(
                                       <div>
                                         <div style={{fontWeight:800,fontSize:16,color:'#ce93d8'}}>{q.s1}–{q.s2}</div>
