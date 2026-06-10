@@ -1035,7 +1035,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                       ))}
                     </div>
                     <div style={{overflowX:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:400}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth: Math.max(400, allNicknames.length * 90)}}>
                         <thead>
                           <tr style={{background:'#0d2137',color:'#90caf9'}}>
                             <th style={{padding:'8px 10px',textAlign:'left',minWidth:120}}>Partido</th>
