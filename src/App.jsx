@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from './supabase.js'
 
 // ── CONSTANTES ────────────────────────────────────────────────
-const ADMIN_PIN  = '2145'
+const ADMIN_PIN  = '2026'
 const LOCK_DATE  = new Date('2026-06-11T21:00:00Z')
 
 const GROUPS = {
@@ -127,8 +127,19 @@ function MatchRow({ m, onScore, locked, isAdmin }) {
 
 // ── APP ───────────────────────────────────────────────────────
 export default function App() {
-  const [nickname, setNickname]   = useState('')
-  const [nickInput, setNickInput] = useState('')
+  const [nickname, setNickname]     = useState('')
+  const [nickInput, setNickInput]   = useState('')
+  const [pinInput, setPinInput]     = useState('')
+  const [pinConfirm, setPinConfirm] = useState('')
+  const [pinAuth, setPinAuth]       = useState('')
+  const [pinStep, setPinStep]       = useState('nick') // 'nick' | 'create' | 'verify'
+  const [pinError, setPinErrorMsg]  = useState('')
+  const [quinielaUnlocked, setQuinielaUnlocked] = useState(false)
+  const [showChangePin, setShowChangePin] = useState(false)
+  const [changePinCurrent, setChangePinCurrent] = useState('')
+  const [changePinNew, setChangePinNew] = useState('')
+  const [changePinConfirm, setChangePinConfirm] = useState('')
+  const [changePinMsg, setChangePinMsg] = useState('')
   const [tab, setTab]             = useState('grupos')
   const [activeGroup, setActiveGroup] = useState('A')
   const [matches, setMatches]     = useState(DEFAULT_MATCHES)
@@ -169,6 +180,77 @@ export default function App() {
         return row ? { ...m, t1:row.t1||m.t1, t2:row.t2||m.t2, s1:row.s1||'', s2:row.s2||'', pen1:row.pen1||'', pen2:row.pen2||'' } : m
       }))
     }
+  }
+
+  async function handleNickSubmit() {
+    const nick = nickInput.trim()
+    if (!nick) return
+    // Verificar si ya tiene PIN registrado
+    try {
+      const { data } = await supabase.from('players').select('pin').eq('nickname', nick)
+      if (data && data.length > 0) {
+        // Ya existe — pedir PIN
+        setPinStep('verify')
+      } else {
+        // Nuevo jugador — crear PIN
+        setPinStep('create')
+      }
+      setNickname(nick)
+    } catch {
+      setPinStep('create')
+      setNickname(nick)
+    }
+  }
+
+  async function handleCreatePin() {
+    if (pinInput.length !== 4 || !/^\d{4}$/.test(pinInput)) {
+      setPinErrorMsg('El PIN debe ser de 4 dígitos numéricos')
+      return
+    }
+    if (pinInput !== pinConfirm) {
+      setPinErrorMsg('Los PINs no coinciden')
+      return
+    }
+    await supabase.from('players').upsert({ nickname, pin: pinInput })
+    setQuinielaUnlocked(true)
+    setPinStep('done')
+    setPinErrorMsg('')
+  }
+
+  async function handleVerifyPin() {
+    const { data } = await supabase.from('players').select('pin').eq('nickname', nickname)
+    if (data && data.length > 0 && data[0].pin === pinAuth) {
+      setQuinielaUnlocked(true)
+      setPinStep('done')
+      setPinErrorMsg('')
+    } else {
+      setPinErrorMsg('PIN incorrecto')
+    }
+  }
+
+  async function handleChangePin() {
+    if (changePinNew.length !== 4 || !/^\d{4}$/.test(changePinNew)) {
+      setChangePinMsg('El PIN debe ser de 4 dígitos numéricos')
+      return
+    }
+    if (changePinNew !== changePinConfirm) {
+      setChangePinMsg('Los PINs no coinciden')
+      return
+    }
+    const { data } = await supabase.from('players').select('pin').eq('nickname', nickname)
+    if (!data || data.length === 0 || data[0].pin !== changePinCurrent) {
+      setChangePinMsg('PIN actual incorrecto')
+      return
+    }
+    await supabase.from('players').update({ pin: changePinNew }).eq('nickname', nickname)
+    setChangePinMsg('✅ PIN cambiado correctamente')
+    setTimeout(() => {
+      setShowChangePin(false)
+      setChangePinCurrent('')
+      setChangePinNew('')
+      setChangePinConfirm('')
+      setChangePinMsg('')
+    }, 1500)
   }
 
   async function loadMyQuiniela() {
@@ -232,7 +314,7 @@ export default function App() {
 
   // ── GUARDAR QUINIELA (usuario) ────────────────────────────
   const updateQuiniela = useCallback(async (matchId, field, val) => {
-    if (tournamentStarted || !nickname) return
+    if (tournamentStarted || !nickname || !quinielaUnlocked) return
     setQuiniela(prev => ({ ...prev, [matchId]: { ...(prev[matchId]||{s1:'',s2:''}), [field]:val } }))
     const cur = quiniela[matchId] || { s1:'', s2:'' }
     await supabase.from('quiniela').upsert({
@@ -276,12 +358,7 @@ export default function App() {
     setAiLoading(true); setAiMsg('')
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers: {
-  'Content-Type': 'application/json',
-  'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-  'anthropic-version': '2023-06-01',
-  'anthropic-dangerous-direct-browser-access': 'true',
-},
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           model:'claude-sonnet-4-20250514', max_tokens:2000,
           tools:[{type:'web_search_20250305',name:'web_search'}],
@@ -311,7 +388,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
   // ── TABS ──────────────────────────────────────────────────
   const TABS = [
     {id:'grupos',label:'📊 Grupos'},
-    ...(isAdmin ? [{id:'partidos',label:'⚽ Partidos'}] : []),
+    {id:'partidos',label:'⚽ Partidos'},
     {id:'eliminatorias',label:'🏆 Eliminatorias'},
     {id:'bracket',label:'🌐 Bracket'},
     {id:'quiniela',label:'🎯 Quiniela'},
@@ -394,26 +471,77 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
     return {pts:0, color:'#ef5350', label:'❌'}
   }
 
-  // ── PANTALLA DE NICKNAME ──────────────────────────────────
-  if (!nickname) return (
+  // ── PANTALLA DE ENTRADA ──────────────────────────────────
+  if (!nickname || pinStep === 'create' || pinStep === 'verify') return (
     <div style={{fontFamily:'system-ui',background:'#0a0e1a',minHeight:'100vh',display:'flex',
       alignItems:'center',justifyContent:'center',color:'#fff'}}>
       <div style={{background:'#0d1b2a',border:'2px solid #1565c0',borderRadius:20,padding:36,
         width:300,textAlign:'center',boxShadow:'0 8px 32px rgba(0,0,0,0.5)'}}>
         <div style={{fontSize:40,marginBottom:8}}>🏆</div>
-        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Quiniela Freddy & Pavel 2026</div>
-        <div style={{fontSize:13,color:'#90caf9',marginBottom:24}}>Introduce tu nombre para entrar</div>
-        <input value={nickInput} onChange={e=>setNickInput(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&nickInput.trim()&&setNickname(nickInput.trim())}
-          placeholder="Tu nombre o apodo"
-          style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
-            background:'#1e2d3d',color:'#fff',fontSize:16,textAlign:'center',
-            boxSizing:'border-box',marginBottom:14}}/>
-        <button onClick={()=>nickInput.trim()&&setNickname(nickInput.trim())}
-          style={{width:'100%',background:'#1565c0',border:'none',borderRadius:10,padding:12,
-            color:'#fff',fontWeight:800,fontSize:16,cursor:'pointer'}}>
-          ¡Entrar! ⚽
-        </button>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Copa del Mundo 2026</div>
+
+        {/* PASO 1: Nickname */}
+        {pinStep==='nick' && <>
+          <div style={{fontSize:13,color:'#90caf9',marginBottom:24}}>Introduce tu nombre para entrar</div>
+          <input value={nickInput} onChange={e=>setNickInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&nickInput.trim()&&handleNickSubmit()}
+            placeholder="Tu nombre o apodo"
+            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+              background:'#1e2d3d',color:'#fff',fontSize:16,textAlign:'center',
+              boxSizing:'border-box',marginBottom:14}}/>
+          <button onClick={handleNickSubmit}
+            style={{width:'100%',background:'#1565c0',border:'none',borderRadius:10,padding:12,
+              color:'#fff',fontWeight:800,fontSize:16,cursor:'pointer'}}>
+            ¡Entrar! ⚽
+          </button>
+        </>}
+
+        {/* PASO 2: Crear PIN */}
+        {pinStep==='create' && <>
+          <div style={{fontSize:13,color:'#90caf9',marginBottom:8}}>Hola <b>{nickname}</b> 👋</div>
+          <div style={{fontSize:12,color:'#546e7a',marginBottom:20}}>Primera vez aquí. Crea un PIN de 4 dígitos para proteger tu quiniela.</div>
+          <input type="password" maxLength={4} value={pinInput} onChange={e=>setPinInput(e.target.value)}
+            placeholder="PIN de 4 dígitos"
+            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+              background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+              boxSizing:'border-box',marginBottom:10,letterSpacing:8}}/>
+          <input type="password" maxLength={4} value={pinConfirm} onChange={e=>setPinConfirm(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&handleCreatePin()}
+            placeholder="Confirmar PIN"
+            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+              background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+              boxSizing:'border-box',marginBottom:14,letterSpacing:8}}/>
+          {pinError&&<div style={{color:'#e53935',fontSize:12,marginBottom:10}}>{pinError}</div>}
+          <button onClick={handleCreatePin}
+            style={{width:'100%',background:'#1b5e20',border:'none',borderRadius:10,padding:12,
+              color:'#fff',fontWeight:800,fontSize:16,cursor:'pointer'}}>
+            Crear PIN 🔐
+          </button>
+        </>}
+
+        {/* PASO 3: Verificar PIN */}
+        {pinStep==='verify' && <>
+          <div style={{fontSize:13,color:'#90caf9',marginBottom:8}}>Bienvenido de vuelta, <b>{nickname}</b> 👋</div>
+          <div style={{fontSize:12,color:'#546e7a',marginBottom:20}}>Introduce tu PIN para acceder a tu quiniela.</div>
+          <input type="password" maxLength={4} value={pinAuth} onChange={e=>setPinAuth(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&handleVerifyPin()}
+            placeholder="Tu PIN"
+            style={{width:'100%',padding:'10px 12px',borderRadius:8,
+              border:`2px solid ${pinError?'#e53935':'#37474f'}`,
+              background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+              boxSizing:'border-box',marginBottom:14,letterSpacing:8}}/>
+          {pinError&&<div style={{color:'#e53935',fontSize:12,marginBottom:10}}>{pinError}</div>}
+          <button onClick={handleVerifyPin}
+            style={{width:'100%',background:'#1565c0',border:'none',borderRadius:10,padding:12,
+              color:'#fff',fontWeight:800,fontSize:16,cursor:'pointer'}}>
+            Entrar 🔐
+          </button>
+          <button onClick={()=>{setNickname('');setPinStep('nick');setPinErrorMsg('');setPinAuth('')}}
+            style={{width:'100%',background:'transparent',border:'none',color:'#546e7a',
+              fontSize:12,cursor:'pointer',marginTop:8}}>
+            ← Cambiar nombre
+          </button>
+        </>}
       </div>
     </div>
   )
@@ -421,6 +549,45 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
   // ── UI PRINCIPAL ──────────────────────────────────────────
   return (
     <div style={{fontFamily:'system-ui,sans-serif',background:'#0a0e1a',minHeight:'100vh',color:'#e8eaf6'}}>
+
+      {/* MODAL CAMBIAR PIN */}
+      {showChangePin && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',zIndex:100,
+          display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#0d1b2a',border:'2px solid #1565c0',borderRadius:16,padding:28,width:280,textAlign:'center'}}>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:16}}>🔑 Cambiar PIN</div>
+            <input type="password" maxLength={4} value={changePinCurrent}
+              onChange={e=>setChangePinCurrent(e.target.value)}
+              placeholder="PIN actual"
+              style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+                background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+                boxSizing:'border-box',marginBottom:10,letterSpacing:8}}/>
+            <input type="password" maxLength={4} value={changePinNew}
+              onChange={e=>setChangePinNew(e.target.value)}
+              placeholder="Nuevo PIN"
+              style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+                background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+                boxSizing:'border-box',marginBottom:10,letterSpacing:8}}/>
+            <input type="password" maxLength={4} value={changePinConfirm}
+              onChange={e=>setChangePinConfirm(e.target.value)}
+              placeholder="Confirmar nuevo PIN"
+              style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'2px solid #37474f',
+                background:'#1e2d3d',color:'#fff',fontSize:20,textAlign:'center',
+                boxSizing:'border-box',marginBottom:14,letterSpacing:8}}/>
+            {changePinMsg && <div style={{fontSize:12,marginBottom:10,
+              color:changePinMsg.startsWith('✅')?'#69f0ae':'#e53935'}}>{changePinMsg}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setShowChangePin(false);setChangePinMsg('');
+                setChangePinCurrent('');setChangePinNew('');setChangePinConfirm('')}}
+                style={{flex:1,padding:10,borderRadius:8,border:'none',background:'#263238',
+                  color:'#90a4ae',cursor:'pointer',fontWeight:700}}>Cancelar</button>
+              <button onClick={handleChangePin}
+                style={{flex:1,padding:10,borderRadius:8,border:'none',background:'#1565c0',
+                  color:'#fff',cursor:'pointer',fontWeight:700}}>Cambiar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LOGIN MODAL */}
       {showLogin && (
@@ -447,9 +614,16 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
       {/* HEADER */}
       <div style={{background:'linear-gradient(135deg,#1a237e,#283593,#1565c0)',padding:'14px 16px 0',textAlign:'center'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',maxWidth:900,margin:'0 auto'}}>
-          <div style={{fontSize:13,color:'#90caf9',paddingTop:6}}>👤 {nickname}</div>
+          <div style={{fontSize:13,color:'#90caf9',paddingTop:6}}>
+            👤 {nickname}
+            <button onClick={()=>setShowChangePin(true)}
+              style={{background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,
+                padding:'2px 8px',color:'#90caf9',cursor:'pointer',fontSize:10,marginLeft:6}}>
+              🔑 PIN
+            </button>
+          </div>
           <div>
-            <div style={{fontSize:24,fontWeight:800}}>🏆 Quiniela Freddy & Pavel 2026</div>
+            <div style={{fontSize:24,fontWeight:800}}>🏆 Copa del Mundo 2026</div>
             <div style={{fontSize:11,color:'#90caf9',marginBottom:6}}>EE.UU. · Canadá · México • 11 Jun – 19 Jul</div>
           </div>
           <div style={{textAlign:'right',paddingTop:4}}>
@@ -535,7 +709,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
         )}
 
         {/* ── PARTIDOS ── */}
-        {tab==='partidos' && isAdmin && groupMs.map(m=>(
+        {tab==='partidos' && groupMs.map(m=>(
           <MatchRow key={m.id} m={m} onScore={updateMatchScore} locked={isLocked} isAdmin={isAdmin}/>
         ))}
 
@@ -646,7 +820,12 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
                 🔒 La quiniela está cerrada. El torneo ya ha comenzado.
               </div>
             )}
-            {!tournamentStarted && (
+            {!tournamentStarted && !quinielaUnlocked && (
+              <div style={{background:'#b71c1c',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#ffcdd2',marginBottom:12}}>
+                🔒 Introduce tu PIN para editar tu quiniela.
+              </div>
+            )}
+            {!tournamentStarted && quinielaUnlocked && (
               <div style={{background:'#1a2744',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#90caf9',marginBottom:12}}>
                 🎯 Tus pronósticos se guardan automáticamente en la nube. Cierra el <b>11 de junio</b>.<br/>
                 +3 pts resultado exacto · +1 pt ganador/empate correcto
