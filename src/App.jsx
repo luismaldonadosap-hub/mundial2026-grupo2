@@ -476,7 +476,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
     <div style={{fontFamily:'system-ui',background:'#0a0e1a',minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff'}}>
       <div style={{background:'#0d1b2a',border:'2px solid #1565c0',borderRadius:20,padding:36,width:300,textAlign:'center',boxShadow:'0 8px 32px rgba(0,0,0,0.5)'}}>
         <div style={{fontSize:40,marginBottom:8}}>🏆</div>
-        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Club de Toby - Mundial 2026</div>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:4}}>Copa Freddy&Pavel 2026</div>
 
         {pinStep==='nick'&&<>
           <div style={{fontSize:13,color:'#90caf9',marginBottom:24}}>Introduce tu nombre para entrar</div>
@@ -587,7 +587,7 @@ Para eliminatorias usa phase: r32/r16/qf/sf/tp/final y omite grp.`}]
             </button>
           </div>
           <div>
-            <div style={{fontSize:24,fontWeight:800}}>🏆 Club de Toby - Mundial 2026</div>
+            <div style={{fontSize:24,fontWeight:800}}>🏆 Copa Freddy&Pavel 2026</div>
             <div style={{fontSize:11,color:'#90caf9',marginBottom:6}}>EE.UU. · Canadá · México • 11 Jun – 19 Jul</div>
           </div>
           <div style={{textAlign:'right',paddingTop:4}}>
