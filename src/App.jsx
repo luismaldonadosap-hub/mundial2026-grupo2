@@ -861,7 +861,7 @@ export default function App(){
             </div>
             {(()=>{
               const tpMatch=matches.find(m=>m.phase==='tp')
-              if(!tpMatch||!tpMatch.t1) return null
+              if(!tpMatch) return null
               return(
                 <div style={{marginTop:16,maxWidth:200}}>
                   <div style={{textAlign:'center',fontWeight:700,fontSize:11,color:'#37474f',background:'rgba(0,0,0,0.3)',borderRadius:8,padding:'4px 8px',marginBottom:8}}>🥉 Tercer Puesto</div>
