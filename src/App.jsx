@@ -58,10 +58,10 @@ const PHASE_COUNT  = {r32:16,r16:8,qf:4,sf:2,tp:1,final:1}
 // Bracket tree for auto-advance
 const BRACKET_TREE = {
   r32: [
-    {next:'r16',idx:0,pos:0},{next:'r16',idx:1,pos:0},{next:'r16',idx:0,pos:1},{next:'r16',idx:1,pos:1},
-    {next:'r16',idx:2,pos:0},{next:'r16',idx:2,pos:1},{next:'r16',idx:3,pos:0},{next:'r16',idx:3,pos:1},
+    {next:'r16',idx:0,pos:0},{next:'r16',idx:1,pos:0},{next:'r16',idx:0,pos:1},{next:'r16',idx:2,pos:0},
+    {next:'r16',idx:1,pos:1},{next:'r16',idx:2,pos:1},{next:'r16',idx:3,pos:0},{next:'r16',idx:3,pos:1},
     {next:'r16',idx:4,pos:0},{next:'r16',idx:4,pos:1},{next:'r16',idx:5,pos:0},{next:'r16',idx:5,pos:1},
-    {next:'r16',idx:6,pos:0},{next:'r16',idx:6,pos:1},{next:'r16',idx:7,pos:0},{next:'r16',idx:7,pos:1},
+    {next:'r16',idx:6,pos:0},{next:'r16',idx:7,pos:0},{next:'r16',idx:6,pos:1},{next:'r16',idx:7,pos:1},
   ],
   r16: [
     {next:'qf',idx:0,pos:0},{next:'qf',idx:0,pos:1},{next:'qf',idx:1,pos:0},{next:'qf',idx:1,pos:1},
@@ -72,7 +72,6 @@ const BRACKET_TREE = {
   ],
   sf: [
     {next:'final',idx:0,pos:0},{next:'final',idx:0,pos:1},
-    {next:'tp',idx:0,pos:0},{next:'tp',idx:0,pos:1},
   ],
 }
 
@@ -237,7 +236,7 @@ export default function App(){
       if(data&&data.length>0){
         setMatches(prev=>prev.map(m=>{
           const row=data.find(r=>r.id===m.id)
-          return row?{...m,t1:row.t1||m.t1,t2:row.t2||m.t2,s1:row.s1||'',s2:row.s2||'',pen1:row.pen1||'',pen2:row.pen2||''}:m
+          return row?{...m,t1:row.t1??m.t1,t2:row.t2??m.t2,s1:row.s1||'',s2:row.s2||'',pen1:row.pen1||'',pen2:row.pen2||''}:m
         }))
       }
     }catch(e){}
@@ -333,6 +332,7 @@ export default function App(){
 
   // ── WINNER LOGIC ──────────────────────────────────────────
   function getWinner(m){
+    if(m.s1===''||m.s2===''||m.s1==null||m.s2==null) return null
     const s1=parseInt(m.s1),s2=parseInt(m.s2)
     if(isNaN(s1)||isNaN(s2)) return null
     if(s1>s2) return m.t1
@@ -344,28 +344,49 @@ export default function App(){
     return null
   }
 
-  async function advanceWinner(updatedMatch){
-    if(!updatedMatch?.phase||updatedMatch.phase==='groups'||updatedMatch.phase==='tp') return
-    const phaseTree=BRACKET_TREE[updatedMatch.phase]
-    if(!phaseTree) return
-    const phaseMatches=matchesRef.current.filter(m=>m.phase===updatedMatch.phase)
-    const idx=phaseMatches.findIndex(m=>m.id===updatedMatch.id)
-    if(idx<0||idx>=phaseTree.length) return
-    const treeEntry=phaseTree[idx]
-    const winner=getWinner(updatedMatch)
-    if(!winner) return
-    const nextMatches=matchesRef.current.filter(m=>m.phase===treeEntry.next)
-    const nextMatch=nextMatches[treeEntry.idx]
-    if(!nextMatch) return
-    const field=treeEntry.pos===0?'t1':'t2'
-    if(nextMatch[field]===winner) return
-    await supabase.from('matches').upsert({
-      id:nextMatch.id,phase:nextMatch.phase,grp:null,
-      t1:field==='t1'?winner:nextMatch.t1,
-      t2:field==='t2'?winner:nextMatch.t2,
-      s1:nextMatch.s1||'',s2:nextMatch.s2||'',pen1:nextMatch.pen1||'',pen2:nextMatch.pen2||''
-    })
-    await loadMatches()
+  // Recomputes every downstream bracket slot (winner→next round, sf loser→3er puesto)
+  // from the current state of r32/r16/qf/sf. Also clears a slot (and its score) when
+  // its source match no longer has a decided winner, so deleting a result upstream
+  // properly un-populates Final / Tercer Puesto instead of leaving stale teams behind.
+  async function recalculateBracket(){
+    let current=matchesRef.current
+    const updates=[]
+
+    function applyToSlot(nextPhase,nextIdx,field,team){
+      const nextMatch=current.filter(m=>m.phase===nextPhase)[nextIdx]
+      if(!nextMatch) return
+      const desired=team||''
+      if(nextMatch[field]===desired) return
+      const updated={...nextMatch,[field]:desired,s1:'',s2:'',pen1:'',pen2:''}
+      current=current.map(m=>m.id===nextMatch.id?updated:m)
+      updates.push(updated)
+    }
+
+    for(const phase of ['r32','r16','qf','sf']){
+      const tree=BRACKET_TREE[phase]
+      if(!tree) continue
+      current.filter(m=>m.phase===phase).forEach((m,idx)=>{
+        const entry=tree[idx]
+        if(!entry) return
+        const winner=getWinner(m)
+        applyToSlot(entry.next,entry.idx,entry.pos===0?'t1':'t2',winner)
+        if(phase==='sf'){
+          const loser=winner?(winner===m.t1?m.t2:m.t1):null
+          applyToSlot('tp',0,idx===0?'t1':'t2',loser)
+        }
+      })
+    }
+
+    if(updates.length===0) return
+    for(const u of updates){
+      await supabase.from('matches').upsert({
+        id:u.id,phase:u.phase,grp:null,
+        t1:u.t1,t2:u.t2,s1:u.s1,s2:u.s2,pen1:u.pen1,pen2:u.pen2
+      })
+    }
+    const byId=new Map(updates.map(u=>[u.id,u]))
+    setMatches(prev=>prev.map(m=>byId.has(m.id)?{...m,...byId.get(m.id)}:m))
+    matchesRef.current=matchesRef.current.map(m=>byId.has(m.id)?{...m,...byId.get(m.id)}:m)
   }
 
   // ── MATCH SCORES ──────────────────────────────────────────
@@ -376,13 +397,14 @@ export default function App(){
     if(!m) return
     setSaving(true)
     const updated={...m,[field]:val}
+    matchesRef.current = matchesRef.current.map(x=>x.id===id?updated:x)
     await supabase.from('matches').upsert({
       id,phase:m.phase,grp:m.grp,
       t1:field==='t1'?val:m.t1,t2:field==='t2'?val:m.t2,
       s1:field==='s1'?val:m.s1,s2:field==='s2'?val:m.s2,
       pen1:field==='pen1'?val:m.pen1,pen2:field==='pen2'?val:m.pen2,
     })
-    if(['s1','s2','pen1','pen2'].includes(field)) await advanceWinner(updated)
+    if(['s1','s2','pen1','pen2'].includes(field)&&m.phase!=='groups') await recalculateBracket()
     setSaving(false)
   },[isLocked])
 
@@ -391,6 +413,8 @@ export default function App(){
     setMatches(prev=>prev.map(m=>m.id===id?{...m,[field]:val}:m))
     const m=matchesRef.current.find(x=>x.id===id)
     if(!m) return
+    const updated={...m,[field]:val}
+    matchesRef.current = matchesRef.current.map(x=>x.id===id?updated:x)
     await supabase.from('matches').upsert({
       id,phase:m.phase,grp:null,
       t1:field==='t1'?val:m.t1,t2:field==='t2'?val:m.t2,
@@ -856,28 +880,29 @@ export default function App(){
                       {(m.pen1||m.pen2)&&<div style={{fontSize:10,color:'#ff7043',textAlign:'right'}}>Pen {m.pen1}–{m.pen2}</div>}
                     </div>
                   ))}
+                  {phase==='final'&&(()=>{
+                    const tpMatch=matches.find(m=>m.phase==='tp')
+                    if(!tpMatch||!tpMatch.t1) return null
+                    return(
+                      <div style={{marginTop:16}}>
+                        <div style={{textAlign:'center',fontWeight:700,fontSize:11,color:'#37474f',background:'rgba(0,0,0,0.3)',borderRadius:8,padding:'4px 8px',marginBottom:8}}>🥉 Tercer Puesto</div>
+                        <div style={{background:'#0d1b2a',border:'1px solid #1e3a5f',borderRadius:8,padding:'8px 10px',fontSize:12}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                            <span style={{color:'#cfd8dc'}}>{F(tpMatch.t1)}</span>
+                            <span style={{fontWeight:800,color:'#fff'}}>{tpMatch.s1}</span>
+                          </div>
+                          <div style={{display:'flex',justifyContent:'space-between'}}>
+                            <span style={{color:'#cfd8dc'}}>{F(tpMatch.t2)}</span>
+                            <span style={{fontWeight:800,color:'#fff'}}>{tpMatch.s2}</span>
+                          </div>
+                          {(tpMatch.pen1||tpMatch.pen2)&&<div style={{fontSize:10,color:'#ff7043',textAlign:'right'}}>Pen {tpMatch.pen1}–{tpMatch.pen2}</div>}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
-            {(()=>{
-              const tpMatch=matches.find(m=>m.phase==='tp')
-              if(!tpMatch) return null
-              return(
-                <div style={{marginTop:16,maxWidth:200}}>
-                  <div style={{textAlign:'center',fontWeight:700,fontSize:11,color:'#37474f',background:'rgba(0,0,0,0.3)',borderRadius:8,padding:'4px 8px',marginBottom:8}}>🥉 Tercer Puesto</div>
-                  <div style={{background:'#0d1b2a',border:'1px solid #1e3a5f',borderRadius:8,padding:'8px 10px',fontSize:12}}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
-                      <span style={{color:'#cfd8dc'}}>{F(tpMatch.t1)}</span>
-                      <span style={{fontWeight:800,color:'#fff'}}>{tpMatch.s1}</span>
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between'}}>
-                      <span style={{color:'#cfd8dc'}}>{F(tpMatch.t2)}</span>
-                      <span style={{fontWeight:800,color:'#fff'}}>{tpMatch.s2}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
             {(()=>{
               const f=matches.find(m=>m.phase==='final')
               if(!f||(!f.s1&&!f.s2)) return null
